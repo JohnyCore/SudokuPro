@@ -1,0 +1,4 @@
+# The tree has mixed line endings: main.py and most of the older modules are
+# CRLF, the newer ones are LF. Without this, Git normalises per file on commit
+# and rewrites the other way on checkout, so every diff is whole-file noise.
+* text=auto

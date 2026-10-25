@@ -1,0 +1,129 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sudoku-pro"
+version = "0.1.0"
+description = "A configurable Sudoku game, generator, trainer, and analyzer."
+requires-python = ">=3.10"
+license = {text = "GPL-3.0-or-later"}
+authors = [{name = "Sudoku Pro contributors"}]
+keywords = ["sudoku", "puzzle", "solver", "generator", "trainer", "pyqt"]
+dependencies = [
+    "PyQt5>=5.15,<6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    # The suite constructs real Qt widgets, so a hang is a plausible failure and
+    # CI needs a way out that is not a human watching a job time out.
+    "pytest-timeout>=2.3",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "black>=24.8",
+]
+test = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+sudoku-pro = "main:main"
+
+[tool.setuptools]
+py-modules = ["main", "moves", "overlay", "share", "board", "candidates", "strategies", "advanced_strategies", "advanced_search", "explanations", "analysis", "training", "game_modes", "daily", "session_store", "interaction", "annotations", "accessibility", "identity", "solver"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -m 'not slow'"
+pythonpath = ["."]
+markers = [
+    # The soundness oracle proves every deduction against the solver. It is the
+    # slowest thing in the suite and was built to gate a phase of work, not to
+    # run on every commit. `-m slow` runs it; `SOUNDNESS=1` runs the asserting
+    # variant. Both are opt-in for that reason.
+    "slow: exhaustive property tests, opt in with `-m slow`",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+extend-exclude = ["__pycache__"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+# The dev scripts under .devtools are run by hand from a shell, and they set the
+# offscreen platform and a scratch HOME *before* importing PyQt5 -- which has to
+# happen before any QApplication exists or Qt tries to reach a display. They also
+# pack a whole driver into a few lines to stay readable as a checklist. Neither is
+# worth reformatting, and excluding them keeps the app's own gate meaningful.
+".devtools/*" = ["E402", "E701", "E702"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.black]
+line-length = 120
+target-version = ["py310"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_unused_configs = true
+ignore_missing_imports = true
+# `check_untyped_defs = false` against code that is 0.2% annotated meant mypy
+# checked almost nothing, which is worse than not running it: it reported a
+# clean bill of health for a file nobody had checked.
+check_untyped_defs = true
+
+# main.py is 14,000 lines and 0.2% annotated. It is checked, because checking it
+# found a real defect that 3,400 tests had not: a completion-recording call
+# carrying a duplicate keyword. Two of its settings dictionaries are annotated
+# Any for the same reason -- left to inference they are dict[str, object], which
+# fails every lookup at the call site for reasons that have nothing to do with it,
+# and that alone was two thirds of the errors here.
+files = [
+    "accessibility.py",
+    "analysis.py",
+    "annotations.py",
+    "advanced_search.py",
+    "advanced_strategies.py",
+    "board.py",
+    "candidates.py",
+    "daily.py",
+    "explanations.py",
+    "game_modes.py",
+    "identity.py",
+    "interaction.py",
+    "main.py",
+    "moves.py",
+    "overlay.py",
+    "session_store.py",
+    "share.py",
+    "solver.py",
+    "stats_manager.py",
+    "strategies.py",
+    "training.py",
+]
+
+# Three codes are off for main.py and new_puzzle_panel.py. All three are gaps in
+# the installed PyQt5 stubs, or the deliberate idiom, rather than defects in the
+# app:
+#   attr-defined  207 complaints about Qt.UserRole, Qt.NoPen, QEvent.Show and the
+#                 rest of the enums that plainly exist at runtime
+#   union-attr     63 about horizontalHeader() and friends whose stubs return
+#                 None because they can, for a deleted view
+#   method-assign   7 deliberate overrides, widget.mousePressEvent = ..., which is
+#                 the supported way to hook a single widget in PyQt
+#
+# What is still checked is the classes that catch real bugs: argument, operator and
+# assignment types, indexing, and the control-flow codes. Annotating those files
+# normally is what would let these three come back on.
+[[tool.mypy.overrides]]
+module = ["main", "new_puzzle_panel"]
+disable_error_code = ["attr-defined", "union-attr", "method-assign"]

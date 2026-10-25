@@ -1,0 +1,51 @@
+# Tool caches. All three were sitting in the working tree and none of them is
+# source: they are rebuilt by the next `pytest`, `ruff` or `mypy`.
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.tox/
+.nox/
+
+# Packaging and editable-install artefacts.
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+tests/
+.devtools/
+.github/
+docs/
+
+
+# Test and coverage output.
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Local environment files. Keep example templates versionable.
+.env
+.env.*
+!.env.example
+
+# Operating-system and editor artefacts.
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+
+# Generated knowledge graph. 16MB of derived artefacts in 190 files, rebuilt by
+# re-running the graphify skill against the source. Nothing reads it at runtime.
+graphify-out/
+
+# The app's own crash report. It used to be written to the current working
+# directory, which meant launching the app from a checkout dropped a file into
+# the source tree -- and one of those was committed, containing the two words
+# "NoneType: None". It now goes beside the settings and the save file, under
+# the user's data directory. It is ignored here as well so a run from an older
+# checkout cannot reintroduce it.
+sudoku_startup_error.log
