@@ -1,7 +1,7 @@
 <div align="center">
 
 <p>
-  <img width="1280" src="https://i.imgur.com/PMsjjoZ.png" alt="SudokuPro screenshot" />
+  <img width="1280" src="https://i.imgur.com/70O5ukL.png" alt="SudokuPro screenshot" />
 </p>
 
 <h1>SudokuPro</h1>
