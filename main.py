@@ -10681,6 +10681,67 @@ class ReplayWorker(QRunnable):
         self.signals.finished.emit(report)
 
 
+class ExplainMistakeSignals(QObject):
+    finished = pyqtSignal(object, bool)
+
+
+class ExplainMistakeWorker(QRunnable):
+    """Find the deduction that excluded a wrong digit, off the GUI thread.
+
+    The GUI-thread version scans both engines sequentially and freezes the
+    window for ~200ms on a 16x16 board. The worker copies the board state in
+    and returns the explanation text or a "slip" message.
+    """
+
+    def __init__(self, board, solution, row, col, value, box_rows, box_cols, variant, killer, cages):
+        super().__init__()
+        self.board = [row[:] for row in board]
+        self.solution = [row[:] for row in solution]
+        self.row = row
+        self.col = col
+        self.value = value
+        self.box_rows = box_rows
+        self.box_cols = box_cols
+        self.variant = variant
+        self.killer = killer
+        self.cages = tuple(cages or ())
+        self.signals = ExplainMistakeSignals()
+
+    def run(self):
+        from advanced_strategies import AdvancedStrategyEngine
+        from analysis import CandidateState
+        from explanations import ExplainEngine
+        from strategies import StrategyEngine
+
+        state = CandidateState.from_board(
+            self.board,
+            box_rows=self.box_rows,
+            box_cols=self.box_cols,
+            variant=self.variant,
+            manual_notes={},
+            show_all=False,
+            cages=self.cages,
+        )
+        expected = self.solution[self.row][self.col]
+        explainer = ExplainEngine(state)
+        for engine in (StrategyEngine(state), AdvancedStrategyEngine(state)):
+            for deduction in engine.iter_all():
+                if (self.row, self.col, self.value) not in deduction.eliminations:
+                    continue
+                explanation = explainer.explain(deduction)
+                text = (
+                    f"{self.value} was already excluded from R{self.row + 1}C{self.col + 1}.\n\n"
+                    f"{explanation.plain}\n\nThe answer there is {expected}."
+                )
+                self.signals.finished.emit(text, False)
+                return
+        text = (
+            f"{self.value} was not excluded by any logical step at R{self.row + 1}C{self.col + 1} -- "
+            f"it was a slip. The answer there is {expected}."
+        )
+        self.signals.finished.emit(text, True)
+
+
 class TechniqueTrainerSignals(QObject):
     #: Two arguments, not the three `AnalysisWorkerSignals` carries. Reusing
     #: that class and emitting fewer than it declares raises inside the worker
@@ -15722,53 +15783,39 @@ class SudokuWindow(QMainWindow):
     def explain_last_mistake(self):
         """Why that digit was wrong: name the deduction that excluded it.
 
-        Reuses `ExplainEngine` and the same two engines the hint and training
-        paths run, so the words come from the existing explanation machinery
-        rather than a second copy of it. When nothing logical excluded the digit
-        -- a plain slip -- it says so instead of inventing a reason.
-
-        Read-only: it never touches the board, the move log or the statistics.
+        Runs the engine search on a background thread so the GUI does not freeze
+        on large boards. When finished, shows the explanation on the GUI thread.
         """
         last = getattr(self, "_last_mistake", None)
         if last is None:
             QMessageBox.information(self, "No Mistake to Explain", "No wrong digit has been entered yet.")
             return
         row, col, value, board = last
-        expected = self.state.solution[row][col]
-        state = CandidateState.from_board(
+        self.set_status("Analysing mistake...")
+        self._mistake_worker = ExplainMistakeWorker(
             board,
-            box_rows=self.state.box_rows,
-            box_cols=self.state.box_cols,
-            variant="killer" if self.state.killer else "standard",
-            cages=self.state.killer_cages if self.state.killer else None,
+            self.state.solution,
+            row,
+            col,
+            value,
+            self.state.box_rows,
+            self.state.box_cols,
+            "killer" if self.state.killer else "standard",
+            self.state.killer,
+            self.state.killer_cages if self.state.killer else None,
         )
-        explainer = ExplainEngine(state)
-        for engine in (StrategyEngine(state), AdvancedStrategyEngine(state)):
-            # `iter_all`, not `find_all`. `find_all` is `list(self.iter_all())`,
-            # so the whole deduction list was materialised before the loop's
-            # first iteration and the `return` below short-circuited nothing --
-            # it built every fish, every chain and every chain walk in order to
-            # report the first hit. Measured 1372ms -> 225ms on a 16x16, from
-            # the number pad, on the GUI thread with no size cap.
-            for deduction in engine.iter_all():
-                if (row, col, value) not in deduction.eliminations:
-                    continue
-                explanation = explainer.explain(deduction)
-                box = QMessageBox(self)
-                box.setWindowTitle("Why Was That Wrong?")
-                box.setText(
-                    f"{value} was already excluded from R{row + 1}C{col + 1}.\n\n"
-                    f"{explanation.plain}\n\nThe answer there is {expected}."
-                )
-                box.setStyleSheet(build_app_stylesheet(_theme_colors_for(self)))
-                box.exec_()
-                return
-        QMessageBox.information(
-            self,
-            "Why Was That Wrong?",
-            f"{value} was not excluded by any logical step at R{row + 1}C{col + 1} -- "
-            f"it was a slip. The answer there is {expected}.",
-        )
+        self._mistake_worker.signals.finished.connect(self._on_mistake_explained)
+        pool = QThreadPool(self)
+        pool.setMaxThreadCount(1)
+        pool.start(self._mistake_worker)
+
+    def _on_mistake_explained(self, text, is_slip):
+        self.set_status("")
+        box = QMessageBox(self)
+        box.setWindowTitle("Why Was That Wrong?")
+        box.setText(text)
+        box.setStyleSheet(build_app_stylesheet(_theme_colors_for(self)))
+        box.exec_()
 
     def _erase_selection(self):
         if self.is_reviewing_history():

@@ -222,7 +222,6 @@ class CandidateState:
     def toggle_candidate(self, row, col, candidate):
         if self.board[row][col] or candidate not in self.candidates_for(row, col):
             return False
-        self._candidate_cache.clear()
         notes = self.manual_notes.setdefault((row, col), set())
         if candidate in notes:
             notes.remove(candidate)
@@ -236,7 +235,6 @@ class CandidateState:
         invalid = set(candidates) - self.candidates_for(row, col)
         if invalid:
             raise ValueError(f"Invalid candidates: {sorted(invalid)}")
-        self._candidate_cache.clear()
         self.manual_notes[(row, col)] = set(candidates)
 
     def set_show_all(self, enabled):
@@ -256,7 +254,6 @@ class CandidateState:
             notes -= invalid
             if not notes:
                 del self.manual_notes[cell]
-        self._candidate_cache.clear()
         return removed
 
     def digit_filter(self, digit):
