@@ -9,6 +9,7 @@ __pycache__/
 .nox/
 
 # Packaging and editable-install artefacts.
+.archive/
 build/
 dist/
 *.egg-info/
